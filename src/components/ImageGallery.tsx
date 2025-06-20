@@ -1,14 +1,15 @@
-
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Search, Grid, List, Shuffle } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { useToast } from '@/components/ui/use-toast';
 import ImageCard from './ImageCard';
 import ImageUpload from './ImageUpload';
 import ImageEditModal from './ImageEditModal';
 import SlideshowModal from './SlideshowModal';
 import { ImageData, ImageEditData } from '@/types/image';
+import { supabase } from '@/integrations/supabase/client';
 
 const ImageGallery: React.FC = () => {
   const [images, setImages] = useState<ImageData[]>([]);
@@ -19,25 +20,180 @@ const ImageGallery: React.FC = () => {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isSlideshowOpen, setIsSlideshowOpen] = useState(false);
   const [currentSlideshowIndex, setCurrentSlideshowIndex] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const { toast } = useToast();
 
-  const handleImageUpload = (newImages: ImageData[]) => {
-    setImages(prev => [...newImages, ...prev]);
+  // Load images from database on component mount
+  useEffect(() => {
+    loadImages();
+  }, []);
+
+  const loadImages = async () => {
+    try {
+      setLoading(true);
+      const { data, error } = await supabase
+        .from('images')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+
+      const imageData: ImageData[] = data.map((img) => ({
+        id: img.id,
+        name: img.name,
+        file: null as any, // We don't need the file object for loaded images
+        url: supabase.storage.from('images').getPublicUrl(img.file_path).data.publicUrl,
+        tags: img.tags || [],
+        uploadDate: new Date(img.created_at),
+      }));
+
+      setImages(imageData);
+    } catch (error) {
+      console.error('Error loading images:', error);
+      toast({
+        title: "エラー",
+        description: "画像の読み込みに失敗しました",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleImageEdit = (id: string, data: ImageEditData) => {
-    setImages(prev => prev.map(img => 
-      img.id === id ? { ...img, name: data.name, tags: data.tags } : img
-    ));
-  };
+  const handleImageUpload = async (newImages: ImageData[]) => {
+    for (const imageData of newImages) {
+      try {
+        // Upload file to storage
+        const fileExt = imageData.file.name.split('.').pop();
+        const fileName = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}.${fileExt}`;
+        
+        const { error: uploadError } = await supabase.storage
+          .from('images')
+          .upload(fileName, imageData.file);
 
-  const handleImageDelete = (id: string) => {
-    setImages(prev => {
-      const imageToDelete = prev.find(img => img.id === id);
-      if (imageToDelete) {
-        URL.revokeObjectURL(imageToDelete.url);
+        if (uploadError) throw uploadError;
+
+        // Save metadata to database
+        const { data, error: dbError } = await supabase
+          .from('images')
+          .insert({
+            name: imageData.name,
+            file_path: fileName,
+            file_size: imageData.file.size,
+            content_type: imageData.file.type,
+            tags: imageData.tags,
+          })
+          .select()
+          .single();
+
+        if (dbError) throw dbError;
+
+        // Add to local state
+        const newImageData: ImageData = {
+          id: data.id,
+          name: data.name,
+          file: imageData.file,
+          url: supabase.storage.from('images').getPublicUrl(fileName).data.publicUrl,
+          tags: data.tags || [],
+          uploadDate: new Date(data.created_at),
+        };
+
+        setImages(prev => [newImageData, ...prev]);
+
+        toast({
+          title: "成功",
+          description: `${imageData.name} をアップロードしました`,
+        });
+
+      } catch (error) {
+        console.error('Error uploading image:', error);
+        toast({
+          title: "エラー",
+          description: `${imageData.name} のアップロードに失敗しました`,
+          variant: "destructive",
+        });
       }
-      return prev.filter(img => img.id !== id);
-    });
+    }
+  };
+
+  const handleImageEdit = async (id: string, data: ImageEditData) => {
+    try {
+      const { error } = await supabase
+        .from('images')
+        .update({
+          name: data.name,
+          tags: data.tags,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', id);
+
+      if (error) throw error;
+
+      setImages(prev => prev.map(img => 
+        img.id === id ? { ...img, name: data.name, tags: data.tags } : img
+      ));
+
+      toast({
+        title: "成功",
+        description: "画像情報を更新しました",
+      });
+
+    } catch (error) {
+      console.error('Error updating image:', error);
+      toast({
+        title: "エラー",
+        description: "画像情報の更新に失敗しました",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleImageDelete = async (id: string) => {
+    try {
+      // Get image data to find file path
+      const imageToDelete = images.find(img => img.id === id);
+      if (!imageToDelete) return;
+
+      // Get file path from database
+      const { data: imageData, error: fetchError } = await supabase
+        .from('images')
+        .select('file_path')
+        .eq('id', id)
+        .single();
+
+      if (fetchError) throw fetchError;
+
+      // Delete from storage
+      const { error: storageError } = await supabase.storage
+        .from('images')
+        .remove([imageData.file_path]);
+
+      if (storageError) throw storageError;
+
+      // Delete from database
+      const { error: dbError } = await supabase
+        .from('images')
+        .delete()
+        .eq('id', id);
+
+      if (dbError) throw dbError;
+
+      // Remove from local state
+      setImages(prev => prev.filter(img => img.id !== id));
+
+      toast({
+        title: "成功",
+        description: "画像を削除しました",
+      });
+
+    } catch (error) {
+      console.error('Error deleting image:', error);
+      toast({
+        title: "エラー",
+        description: "画像の削除に失敗しました",
+        variant: "destructive",
+      });
+    }
   };
 
   const openEditModal = (image: ImageData) => {
@@ -74,6 +230,17 @@ const ImageGallery: React.FC = () => {
     const matchesTag = selectedTag === 'all' || image.tags.includes(selectedTag);
     return matchesSearch && matchesTag;
   });
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-pink-50 via-purple-50 to-indigo-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="text-6xl mb-4">⏳</div>
+          <h3 className="text-2xl font-semibold text-gray-700">読み込み中...</h3>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-pink-50 via-purple-50 to-indigo-50">
