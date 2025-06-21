@@ -9,7 +9,7 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
-      images: {
+      sexywoman: {
         Row: {
           content_type: string | null
           created_at: string

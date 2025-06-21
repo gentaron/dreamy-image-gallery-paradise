@@ -32,7 +32,7 @@ const ImageGallery: React.FC = () => {
     try {
       setLoading(true);
       const { data, error } = await supabase
-        .from('images')
+        .from('sexywoman')
         .select('*')
         .order('created_at', { ascending: false });
 
@@ -75,7 +75,7 @@ const ImageGallery: React.FC = () => {
 
         // Save metadata to database
         const { data, error: dbError } = await supabase
-          .from('images')
+          .from('sexywoman')
           .insert({
             name: imageData.name,
             file_path: fileName,
@@ -119,7 +119,7 @@ const ImageGallery: React.FC = () => {
   const handleImageEdit = async (id: string, data: ImageEditData) => {
     try {
       const { error } = await supabase
-        .from('images')
+        .from('sexywoman')
         .update({
           name: data.name,
           tags: data.tags,
@@ -156,7 +156,7 @@ const ImageGallery: React.FC = () => {
 
       // Get file path from database
       const { data: imageData, error: fetchError } = await supabase
-        .from('images')
+        .from('sexywoman')
         .select('file_path')
         .eq('id', id)
         .single();
@@ -172,7 +172,7 @@ const ImageGallery: React.FC = () => {
 
       // Delete from database
       const { error: dbError } = await supabase
-        .from('images')
+        .from('sexywoman')
         .delete()
         .eq('id', id);
 
