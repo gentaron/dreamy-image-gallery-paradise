@@ -67,6 +67,11 @@ const SlideshowModal: React.FC<SlideshowModalProps> = ({ images, currentIndex, i
           <h3 className="text-xl font-semibold">{currentImage.name}</h3>
           <p className="text-sm text-gray-300">
             {index + 1} / {images.length}
+            {currentImage.fileSize && (
+              <span className="ml-2">
+                • {(currentImage.fileSize / (1024 * 1024)).toFixed(2)} MB
+              </span>
+            )}
           </p>
         </div>
         
@@ -115,12 +120,17 @@ const SlideshowModal: React.FC<SlideshowModalProps> = ({ images, currentIndex, i
         </>
       )}
 
-      {/* Main image */}
-      <div className="max-w-[90vw] max-h-[80vh] flex items-center justify-center">
+      {/* Main image - 画角が異なる画像でも全部見えるように調整 */}
+      <div className="max-w-[90vw] max-h-[80vh] flex items-center justify-center p-4">
         <img
           src={currentImage.url}
           alt={currentImage.name}
           className="max-w-full max-h-full object-contain rounded-lg shadow-2xl"
+          style={{
+            objectFit: 'contain',
+            width: 'auto',
+            height: 'auto'
+          }}
         />
       </div>
 

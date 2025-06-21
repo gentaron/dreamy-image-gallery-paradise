@@ -6,6 +6,7 @@ export interface ImageData {
   url: string;
   tags: string[];
   uploadDate: Date;
+  fileSize?: number;
 }
 
 export interface ImageEditData {

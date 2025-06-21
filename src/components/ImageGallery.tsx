@@ -8,6 +8,7 @@ import ImageCard from './ImageCard';
 import ImageUpload from './ImageUpload';
 import ImageEditModal from './ImageEditModal';
 import SlideshowModal from './SlideshowModal';
+import StorageInfo from './StorageInfo';
 import { ImageData, ImageEditData } from '@/types/image';
 import { supabase } from '@/integrations/supabase/client';
 
@@ -41,10 +42,11 @@ const ImageGallery: React.FC = () => {
       const imageData: ImageData[] = data.map((img) => ({
         id: img.id,
         name: img.name,
-        file: null as any, // We don't need the file object for loaded images
+        file: { size: img.file_size } as any, // ファイルサイズ情報を保持
         url: supabase.storage.from('images').getPublicUrl(img.file_path).data.publicUrl,
         tags: img.tags || [],
         uploadDate: new Date(img.created_at),
+        fileSize: img.file_size, // 追加のプロパティとしてファイルサイズを保存
       }));
 
       setImages(imageData);
@@ -96,6 +98,7 @@ const ImageGallery: React.FC = () => {
           url: supabase.storage.from('images').getPublicUrl(fileName).data.publicUrl,
           tags: data.tags || [],
           uploadDate: new Date(data.created_at),
+          fileSize: data.file_size,
         };
 
         setImages(prev => [newImageData, ...prev]);
@@ -270,6 +273,13 @@ const ImageGallery: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* Storage Info */}
+      {images.length > 0 && (
+        <div className="max-w-7xl mx-auto px-4 py-4">
+          <StorageInfo images={images} />
+        </div>
+      )}
 
       {/* Controls */}
       {images.length > 0 && (
